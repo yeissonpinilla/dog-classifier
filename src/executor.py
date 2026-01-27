@@ -2,9 +2,10 @@ import time
 from tqdm import tqdm
 import torch
 import torch.nn as nn
+import torchvision
+import matplotlib.pyplot as plt
 
-
-class TrainTest:
+class Executor:
     def __init__(self):
         pass
 
@@ -65,18 +66,14 @@ class TrainTest:
                 loss_fn: nn.Module,
                 optimizer: nn.Module,
                 epochs: int):
-        """
-        """
         start_train = time.time()
         results = {"train_loss" : [],
                 "train_accuracy" : [], 
                 "val_loss" : [],
                 "val_accuracy" : []}
         
-        # use the designated device
         model.to(device)
         
-        # train multiple epoches
         for epo in tqdm(range(epochs)):
             train_loss, train_accuracy = self.train_1Epoch(device=device, 
                                                     model=model,
@@ -103,10 +100,40 @@ class TrainTest:
         return results  
 
     def randomSeed(seed_number: int):
-        """
-        Setup random seeds for reproducibility
-        """
         torch.manual_seed(seed_number)
-        # random seed for CUDA if CUDA is available
         if torch.cuda.is_available():
             torch.cuda.manual_seed(seed_number)
+
+    def predictImage(self, 
+                 model: nn.Module, 
+                 image_path: str,
+                 label_list: list,
+                 device: torch.device,
+                 transform=None, 
+                 file_name: str=""):
+        image = torchvision.io.read_image(str(image_path))
+        image = image.type(torch.float32)
+        image = image / 255.0
+
+        if transform:
+            image = transform(image)
+
+        model.to(device)
+        model.eval()
+        with torch.inference_mode():
+            img_tensor = image.unsqueeze(dim=0)
+            pred_logit = model(img_tensor.to(device))
+            pred_prob = torch.softmax(pred_logit, dim=1)
+            max_prob = pred_prob.max()
+                    
+            pred_id = torch.argmax(pred_prob, dim=1)
+            label_str = label_list[pred_id]
+            
+            print("Prediction probability for each class:",pred_prob)
+
+        plt_img = image.permute(1, 2, 0)
+        plt.imshow(plt_img)
+        title = f"Prediction: {label_str}\n probility = {max_prob:.2%}"
+        plt.title(title)
+        plt.axis(False)
+        plt.savefig(file_name)
